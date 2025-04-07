@@ -1,0 +1,200 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Set font to Times New Roman
+plt.rcParams["font.family"] = "Times New Roman"
+
+# Define input parameters
+c_mean = 20  # Mean cohesion (kPa)
+c_std = 5    # Standard deviation of cohesion
+phi_mean = 50  # Mean friction angle (degrees)
+phi_std = 5    # Standard deviation of friction angle
+rainfall = np.random.choice([2.0, 2.4, 3.0, 3.5, 2.8, 1.5, 1.0, 2.0, 1.8, 1.2, 0.6, 1.5], 100) * 0.0254  # Rainfall in meters
+PGA = np.random.uniform(0.2, 0.3, 100)  # PGA in g
+joint_spacing_mean = 200  # Mean joint spacing (mm)
+joint_spacing_std = 50    # Standard deviation of joint spacing
+slope_angle_mean = 76  # Mean slope angle (degrees)
+slope_angle_std = 5    # Standard deviation of slope angle
+slope_height_mean = 150  # Mean slope height (m)
+slope_height_std = 20    # Standard deviation of slope height
+gamma_mean = 26.5  # Mean unit weight of rock (kN/m³)
+gamma_std = 1.5    # Standard deviation of unit weight
+density_mean = 2.7  # Mean density of rock (g/cm³)
+density_std = 0.2   # Standard deviation of density
+porosity_mean = 0.2  # Mean porosity (fraction)
+porosity_std = 0.05  # Standard deviation of porosity
+water_content_mean = 0.1  # Mean water content (fraction)
+water_content_std = 0.02  # Standard deviation of water content
+
+# Function to calculate FoS for planar failure
+def calculate_FoS_planar(c, phi, rainfall, PGA, joint_spacing, slope_angle, slope_height, gamma, density, porosity, water_content):
+    """
+    FoS calculation for planar failure with all parameters.
+    """
+    # Convert dip angle to radians
+    phi_rad = np.radians(phi)
+    alpha_rad = np.radians(slope_angle)
+    
+    # Estimate pore pressure (u = gamma_w * h_w)
+    infiltration_fraction = 0.3  # 30% of rainfall infiltrates
+    h_w = infiltration_fraction * rainfall  # Water table height in meters
+    gamma_w = 9.81  # Unit weight of water in kN/m³
+    u = gamma_w * h_w  # Pore pressure in kPa
+    
+    # Adjust unit weight of rock based on porosity and water content
+    gamma_adjusted = gamma * (1 - porosity) + gamma_w * porosity * water_content
+    
+    # Normal and shear stresses
+    normal_stress = gamma_adjusted * slope_height * np.cos(alpha_rad)
+    shear_stress = gamma_adjusted * slope_height * np.sin(alpha_rad)
+    
+    # Effective stress considering pore pressure
+    effective_stress = normal_stress - u
+    
+    # Shear strength (Mohr-Coulomb)
+    shear_strength = c + effective_stress * np.tan(phi_rad)
+    
+    # Seismic force (PGA in g)
+    seismic_force = PGA * normal_stress
+    
+    # Factor of Safety
+    FoS = shear_strength / (shear_stress + seismic_force)
+    return FoS
+
+# Vary cohesion and calculate FoS
+c_range = np.linspace(c_mean * 0.8, c_mean * 1.2, 100)  # Vary cohesion by ±20%
+FoS_c = [calculate_FoS_planar(c, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, porosity_mean, water_content_mean) for c in c_range]
+
+# Vary friction angle and calculate FoS
+phi_range = np.linspace(phi_mean * 0.9, phi_mean * 1.1, 100)  # Vary friction angle by ±10%
+FoS_phi = [calculate_FoS_planar(c_mean, phi, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, porosity_mean, water_content_mean) for phi in phi_range]
+
+# Vary rainfall and calculate FoS
+rainfall_range = np.linspace(min(rainfall), max(rainfall), 100)
+FoS_rainfall = [calculate_FoS_planar(c_mean, phi_mean, r, np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, porosity_mean, water_content_mean) for r in rainfall_range]
+
+# Vary PGA and calculate FoS
+PGA_range = np.linspace(min(PGA), max(PGA), 100)
+FoS_PGA = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), p, joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, porosity_mean, water_content_mean) for p in PGA_range]
+
+# Vary joint spacing and calculate FoS
+joint_spacing_range = np.linspace(joint_spacing_mean * 0.8, joint_spacing_mean * 1.2, 100)
+FoS_joint_spacing = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), js, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, porosity_mean, water_content_mean) for js in joint_spacing_range]
+
+# Vary slope angle and calculate FoS
+slope_angle_range = np.linspace(slope_angle_mean * 0.9, slope_angle_mean * 1.1, 100)
+FoS_slope_angle = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, sa, slope_height_mean, gamma_mean, density_mean, porosity_mean, water_content_mean) for sa in slope_angle_range]
+
+# Vary slope height and calculate FoS
+slope_height_range = np.linspace(slope_height_mean * 0.8, slope_height_mean * 1.2, 100)
+FoS_slope_height = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, sh, gamma_mean, density_mean, porosity_mean, water_content_mean) for sh in slope_height_range]
+
+# Vary unit weight of rock and calculate FoS
+gamma_range = np.linspace(gamma_mean * 0.9, gamma_mean * 1.1, 100)
+FoS_gamma = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, g, density_mean, porosity_mean, water_content_mean) for g in gamma_range]
+
+# Vary density and calculate FoS
+density_range = np.linspace(density_mean * 0.9, density_mean * 1.1, 100)
+FoS_density = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, d, porosity_mean, water_content_mean) for d in density_range]
+
+# Vary porosity and calculate FoS
+porosity_range = np.linspace(porosity_mean * 0.8, porosity_mean * 1.2, 100)
+FoS_porosity = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, p, water_content_mean) for p in porosity_range]
+
+# Vary water content and calculate FoS
+water_content_range = np.linspace(water_content_mean * 0.8, water_content_mean * 1.2, 100)
+FoS_water_content = [calculate_FoS_planar(c_mean, phi_mean, np.mean(rainfall), np.mean(PGA), joint_spacing_mean, slope_angle_mean, slope_height_mean, gamma_mean, density_mean, porosity_mean, wc) for wc in water_content_range]
+
+# Plot sensitivity analysis
+plt.figure(figsize=(18, 12))
+
+# Cohesion sensitivity
+plt.subplot(3, 4, 1)
+plt.plot(c_range, FoS_c, color="blue")
+plt.xlabel("Cohesion (kPa)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Cohesion")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Friction angle sensitivity
+plt.subplot(3, 4, 2)
+plt.plot(phi_range, FoS_phi, color="green")
+plt.xlabel("Friction Angle (degrees)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Friction Angle")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Rainfall sensitivity
+plt.subplot(3, 4, 3)
+plt.plot(rainfall_range, FoS_rainfall, color="red")
+plt.xlabel("Rainfall (m)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Rainfall")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# PGA sensitivity
+plt.subplot(3, 4, 4)
+plt.plot(PGA_range, FoS_PGA, color="purple")
+plt.xlabel("PGA (g)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to PGA")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Joint spacing sensitivity
+plt.subplot(3, 4, 5)
+plt.plot(joint_spacing_range, FoS_joint_spacing, color="orange")
+plt.xlabel("Joint Spacing (mm)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Joint Spacing")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Slope angle sensitivity
+plt.subplot(3, 4, 6)
+plt.plot(slope_angle_range, FoS_slope_angle, color="brown")
+plt.xlabel("Slope Angle (degrees)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Slope Angle")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Slope height sensitivity
+plt.subplot(3, 4, 7)
+plt.plot(slope_height_range, FoS_slope_height, color="pink")
+plt.xlabel("Slope Height (m)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Slope Height")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Unit weight sensitivity
+plt.subplot(3, 4, 8)
+plt.plot(gamma_range, FoS_gamma, color="cyan")
+plt.xlabel("Unit Weight of Rock (kN/m³)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Unit Weight")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Density sensitivity
+plt.subplot(3, 4, 9)
+plt.plot(density_range, FoS_density, color="magenta")
+plt.xlabel("Density (g/cm³)")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Density")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Porosity sensitivity
+plt.subplot(3, 4, 10)
+plt.plot(porosity_range, FoS_porosity, color="lime")
+plt.xlabel("Porosity")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Porosity")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+# Water content sensitivity
+plt.subplot(3, 4, 11)
+plt.plot(water_content_range, FoS_water_content, color="teal")
+plt.xlabel("Water Content")
+plt.ylabel("FoS")
+plt.title("Sensitivity to Water Content")
+plt.grid(True, linestyle="--", alpha=0.6)
+
+plt.tight_layout()
+plt.show()
