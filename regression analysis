@@ -1,0 +1,72 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
+# Set font to Times New Roman
+plt.rcParams["font.family"] = "Times New Roman"
+
+# Example data (replace with your actual data)
+data = {
+    "Slope": ["S-01", "S-01", "S-02", "S-02", "S-03", "S-03", "S-04", "S-04"],
+    "Failure Type": ["Planar", "Wedge", "Planar", "Wedge", "Planar", "Wedge", "Planar", "Wedge"],
+    "FoS from SMR": [0.491, 0.25, 0.32, 0.495, 0.46, 0.30, 0.495, 0.58],
+    "Mean FoS from Monte Carlo": [0.55, 0.28, 0.35, 0.52, 0.48, 0.32, 0.50, 0.60],
+}
+
+# Create DataFrame
+df = pd.DataFrame(data)
+
+# Perform linear regression
+X = df[["FoS from SMR"]]  # Independent variable (FoS from SMR)
+y = df["Mean FoS from Monte Carlo"]  # Dependent variable (Mean FoS from Monte Carlo)
+
+# Fit the regression model
+regressor = LinearRegression()
+regressor.fit(X, y)
+
+# Get regression coefficients
+slope = regressor.coef_[0]
+intercept = regressor.intercept_
+r_squared = regressor.score(X, y)
+
+# Print regression results
+print("Regression Results:")
+print(f"Slope (Coefficient): {slope:.4f}")
+print(f"Intercept: {intercept:.4f}")
+print(f"R-squared: {r_squared:.4f}")
+
+# Predict FoS from Monte Carlo using the regression model
+y_pred = regressor.predict(X)
+
+# Add predicted values to the DataFrame
+df["Predicted FoS from Monte Carlo"] = y_pred
+
+# Plot regression results
+plt.figure(figsize=(10, 6))
+plt.scatter(
+    df["FoS from SMR"],
+    df["Mean FoS from Monte Carlo"],
+    c="blue",
+    label="Actual Data",
+)
+
+# Plot the regression line
+plt.plot(
+    df["FoS from SMR"],
+    df["Predicted FoS from Monte Carlo"],
+    color="red",
+    linestyle="--",
+    label=f"Regression Line (y = {slope:.2f}x + {intercept:.2f})",
+)
+
+# Add title and labels
+plt.title("Regression Analysis: FoS from SMR vs. Monte Carlo", fontsize=16, pad=20)
+plt.xlabel("FoS from SMR", fontsize=14)
+plt.ylabel("Mean FoS from Monte Carlo", fontsize=14)
+plt.axhline(y=1, color="black", linestyle="--", label="FoS = 1")
+plt.axvline(x=1, color="black", linestyle="--")
+plt.legend()
+plt.grid(True, linestyle="--", alpha=0.6)
+plt.tight_layout()
+plt.show()
