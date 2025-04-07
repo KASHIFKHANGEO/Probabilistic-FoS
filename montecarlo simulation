@@ -1,0 +1,297 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+# Set font to Times New Roman
+plt.rcParams["font.family"] = "Times New Roman"
+
+# Field data for each slope
+slope_data = {
+    "S-01": {
+        "rock_type": "Phyllitic Mica Schist",
+        "RQD": 43,
+        "joint_spacing_range": (200, 600),
+        "UCS_mean": 27.12,
+        "c_mean": 13,  # Updated cohesion (kPa)
+        "c_std": 2,    # Reduced standard deviation for low cohesion
+        "phi_mean": 49.1,  # Updated friction angle (degrees)
+        "phi_std": 5,
+        "gamma": 26.5,
+        "weathering": "Moderately Weathered",
+        "E": 1.64,
+        "nu": 0.19,
+        "G": 0.69,
+        "SMR": 49.1,  # SMR value
+        "width": 250.00,
+        "height": 150.00,
+        "slope_angle": 76,
+        "slope_direction": 7,
+    },
+    "S-02": {
+        "rock_type": "Graphitic Schist",
+        "RQD": 49,
+        "joint_spacing_range": (60, 200),
+        "UCS_mean": 22,
+        "c_mean": 20,  # Updated cohesion (kPa)
+        "c_std": 3,    # Reduced standard deviation for low cohesion
+        "phi_mean": 51.3,  # Updated friction angle (degrees)
+        "phi_std": 5,
+        "gamma": 26.5,
+        "weathering": "Slightly Weathered",
+        "E": 1.50,
+        "nu": 0.20,
+        "G": 0.60,
+        "SMR": 32,  # SMR value
+        "width": 120.00,
+        "height": 150.00,
+        "slope_angle": 77,
+        "slope_direction": 16,
+    },
+    "S-03": {
+        "rock_type": "Graphitic Schist",
+        "RQD": 67,
+        "joint_spacing_range": (60, 200),
+        "UCS_mean": 33,
+        "c_mean": 225,  # Updated cohesion (kPa)
+        "c_std": 20,    # Standard deviation for cohesion
+        "phi_mean": 55.6,  # Updated friction angle (degrees)
+        "phi_std": 5,
+        "gamma": 26.5,
+        "weathering": "Slightly Weathered",
+        "E": 1.60,
+        "nu": 0.19,
+        "G": 0.65,
+        "SMR": 46,  # SMR value
+        "width": 120.00,
+        "height": 480.00,
+        "length": 680.00,
+        "slope_angle": 85,
+        "slope_direction": 240,
+    },
+    "S-04": {
+        "rock_type": "Graphitic Schist + Marble",
+        "RQD": 69,
+        "joint_spacing_range": (60, 200),
+        "UCS_mean": 36.5,
+        "c_mean": 309,  # Updated cohesion (kPa)
+        "c_std": 25,    # Standard deviation for cohesion
+        "phi_mean": 55.8,  # Updated friction angle (degrees)
+        "phi_std": 5,
+        "gamma": 26.5,
+        "weathering": "Moderately Weathered",
+        "E": 1.70,
+        "nu": 0.18,
+        "G": 0.70,
+        "SMR": 49.5,  # SMR value
+        "width": 140.00,
+        "height": 560.00,
+        "length": 150.00,
+        "slope_angle": 86,
+        "slope_direction": 222,
+    },
+}
+
+# Rainfall data (inches to meters conversion: 1 inch = 0.0254 m)
+rainfall_data = {
+    "Jan": 2.0 * 0.0254,
+    "Feb": 2.4 * 0.0254,
+    "Mar": 3.0 * 0.0254,
+    "Apr": 3.5 * 0.0254,
+    "May": 2.8 * 0.0254,
+    "Jun": 1.5 * 0.0254,
+    "Jul": 1.0 * 0.0254,
+    "Aug": 2.0 * 0.0254,
+    "Sep": 1.8 * 0.0254,
+    "Oct": 1.2 * 0.0254,
+    "Nov": 0.6 * 0.0254,
+    "Dec": 1.5 * 0.0254,
+}
+
+# Number of Monte Carlo samples
+num_samples = 10_000
+
+# Function to calculate FoS for planar failure
+def calculate_FoS_planar(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle):
+    """
+    FoS calculation for planar failure with rainfall and PGA.
+    """
+    # Convert dip angle to radians
+    phi_rad = np.radians(phi)
+    alpha_rad = np.radians(slope_angle)
+    
+    # Estimate pore pressure (u = gamma_w * h_w)
+    infiltration_fraction = 0.3  # 30% of rainfall infiltrates
+    h_w = infiltration_fraction * rainfall  # Water table height in meters
+    gamma_w = 9.81  # Unit weight of water in kN/m³
+    u = gamma_w * h_w  # Pore pressure in kPa
+    
+    # Normal and shear stresses
+    normal_stress = gamma * slope_height * np.cos(alpha_rad)
+    shear_stress = gamma * slope_height * np.sin(alpha_rad)
+    
+    # Effective stress considering pore pressure
+    effective_stress = normal_stress - u
+    
+    # Shear strength (Mohr-Coulomb)
+    shear_strength = c + effective_stress * np.tan(phi_rad)
+    
+    # Seismic force (PGA in g)
+    seismic_force = PGA * normal_stress
+    
+    # Factor of Safety
+    FoS = shear_strength / (shear_stress + seismic_force)
+    return FoS
+
+# Function to calculate FoS for wedge failure
+def calculate_FoS_wedge(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle):
+    """
+    FoS calculation for wedge failure with rainfall and PGA.
+    """
+    # Simplified wedge failure model (replace with detailed model if available)
+    FoS_planar = calculate_FoS_planar(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle)
+    return FoS_planar * 0.8  # Assume wedge failure is 80% as stable as planar failure
+
+# Function to calculate FoS for direct toppling
+def calculate_FoS_direct_toppling(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle):
+    """
+    FoS calculation for direct toppling with rainfall and PGA.
+    """
+    # Simplified direct toppling model (replace with detailed model if available)
+    FoS_planar = calculate_FoS_planar(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle)
+    return FoS_planar * 0.6  # Assume direct toppling is 60% as stable as planar failure
+
+# Function to calculate FoS for flexural toppling
+def calculate_FoS_flexural_toppling(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle):
+    """
+    FoS calculation for flexural toppling with rainfall and PGA.
+    """
+    # Simplified flexural toppling model (replace with detailed model if available)
+    FoS_planar = calculate_FoS_planar(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle)
+    return FoS_planar * 0.5  # Assume flexural toppling is 50% as stable as planar failure
+
+# Function to calculate FoS for planar failure with no limit
+def calculate_FoS_planar_no_limit(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle):
+    """
+    FoS calculation for planar failure with no limit (no tension crack).
+    """
+    # Simplified planar failure with no limit model (replace with detailed model if available)
+    FoS_planar = calculate_FoS_planar(c, phi, gamma, joint_spacing, foliation_dip, rainfall, PGA, slope_height, slope_angle)
+    return FoS_planar * 0.7  # Assume planar failure with no limit is 70% as stable as planar failure
+
+# Run simulation for each slope and failure type
+results = {}
+for slope, params in slope_data.items():
+    # Generate random samples
+    c_samples = np.random.normal(params["c_mean"], params["c_std"], num_samples)
+    phi_samples = np.random.normal(params["phi_mean"], params["phi_std"], num_samples)
+    joint_spacing_samples = np.random.uniform(params["joint_spacing_range"][0], params["joint_spacing_range"][1], num_samples)
+    foliation_dip_samples = np.random.uniform(30, 80, num_samples)  # Foliation dip range (30° to 80°)
+    rainfall_samples = np.random.choice(list(rainfall_data.values()), num_samples)  # Random monthly rainfall
+    PGA_samples = np.random.uniform(0.2, 0.3, num_samples)  # PGA in g (0.2g to 0.3g)
+    
+    # Calculate FoS for all failure types
+    FoS_planar = calculate_FoS_planar(c_samples, phi_samples, params["gamma"], joint_spacing_samples, foliation_dip_samples, rainfall_samples, PGA_samples, params["height"], params["slope_angle"])
+    FoS_wedge = calculate_FoS_wedge(c_samples, phi_samples, params["gamma"], joint_spacing_samples, foliation_dip_samples, rainfall_samples, PGA_samples, params["height"], params["slope_angle"])
+    FoS_direct_toppling = calculate_FoS_direct_toppling(c_samples, phi_samples, params["gamma"], joint_spacing_samples, foliation_dip_samples, rainfall_samples, PGA_samples, params["height"], params["slope_angle"])
+    FoS_flexural_toppling = calculate_FoS_flexural_toppling(c_samples, phi_samples, params["gamma"], joint_spacing_samples, foliation_dip_samples, rainfall_samples, PGA_samples, params["height"], params["slope_angle"])
+    FoS_planar_no_limit = calculate_FoS_planar_no_limit(c_samples, phi_samples, params["gamma"], joint_spacing_samples, foliation_dip_samples, rainfall_samples, PGA_samples, params["height"], params["slope_angle"])
+    
+    # Store results
+    results[slope] = {
+        "Planar Failure": FoS_planar,
+        "Wedge Failure": FoS_wedge,
+        "Direct Toppling": FoS_direct_toppling,
+        "Flexural Toppling": FoS_flexural_toppling,
+        "Planar Failure (No Limit)": FoS_planar_no_limit,
+    }
+
+# Calculate FoS from SMR for all failure types
+smr_fos = {
+    "S-01": {
+        "Planar Failure": 49.1 / 100,
+        "Wedge Failure": 25 / 100,
+        "Flexural Toppling": 32.5 / 100,
+        "Direct Toppling": 42.5 / 100,
+        "Planar Failure (No Limit)": 44.9 / 100,
+    },
+    "S-02": {
+        "Planar Failure": 32 / 100,
+        "Wedge Failure": 49.5 / 100,
+        "Flexural Toppling": 53.25 / 100,
+        "Direct Toppling": 57.15 / 100,
+        "Planar Failure (No Limit)": 48 / 100,
+    },
+    "S-03": {
+        "Planar Failure": 46 / 100,
+        "Wedge Failure": 30 / 100,
+        "Flexural Toppling": 46 / 100,
+        "Direct Toppling": 53.25 / 100,
+        "Planar Failure (No Limit)": 46 / 100,
+    },
+    "S-04": {
+        "Planar Failure": 49.5 / 100,
+        "Wedge Failure": 58 / 100,
+        "Flexural Toppling": 49.5 / 100,
+        "Direct Toppling": 53.25 / 100,
+        "Planar Failure (No Limit)": 49.5 / 100,
+    },
+}
+
+# Calculate mean FoS from Monte Carlo for all slopes and failure types
+mean_fos_mc = {
+    slope: {failure_type: np.mean(FoS_values) for failure_type, FoS_values in data.items()}
+    for slope, data in results.items()
+}
+
+# Prepare data for correlation plot
+data = []
+for slope in results.keys():
+    for failure_type in results[slope].keys():
+        data.append({
+            "Slope": slope,
+            "Failure Type": failure_type,
+            "FoS from SMR": smr_fos[slope][failure_type],
+            "FoS from Monte Carlo": mean_fos_mc[slope][failure_type],
+        })
+
+df = pd.DataFrame(data)
+
+# Style 1: Scatter Plot with Regression Line
+plt.figure(figsize=(8, 6))
+sns.regplot(x="FoS from SMR", y="FoS from Monte Carlo", data=df, scatter_kws={"s": 100, "alpha": 0.7})
+plt.xlabel("FoS from SMR")
+plt.ylabel("FoS from Monte Carlo")
+plt.title("Scatter Plot with Regression Line")
+plt.axhline(y=1, color='r', linestyle='--', label="FoS = 1")
+plt.axvline(x=1, color='r', linestyle='--')
+plt.grid()
+plt.legend()
+plt.show()
+
+# Style 2: Heatmap
+heatmap_data = df.pivot(index="Slope", columns="Failure Type", values="FoS from Monte Carlo")
+plt.figure(figsize=(10, 6))
+sns.heatmap(heatmap_data, annot=True, cmap="YlGnBu", vmin=0, vmax=2)
+plt.title("Heatmap of FoS from Monte Carlo")
+plt.show()
+
+# Style 3: Pair Plot
+sns.pairplot(df, hue="Slope", vars=["FoS from SMR", "FoS from Monte Carlo"], height=4)
+plt.suptitle("Pair Plot of FoS from SMR and Monte Carlo", y=1.02)
+plt.show()
+
+# Style 4: Line Plot
+plt.figure(figsize=(10, 6))
+for slope in results.keys():
+    slope_data = df[df["Slope"] == slope]
+    plt.plot(slope_data["Failure Type"], slope_data["FoS from SMR"], marker='o', label=f"{slope} - SMR")
+    plt.plot(slope_data["Failure Type"], slope_data["FoS from Monte Carlo"], marker='x', label=f"{slope} - Monte Carlo")
+plt.xlabel("Failure Type")
+plt.ylabel("Factor of Safety (FoS)")
+plt.title("Line Plot of FoS from SMR and Monte Carlo")
+plt.axhline(y=1, color='r', linestyle='--', label="FoS = 1")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid()
+plt.tight_layout()
+plt.show()
