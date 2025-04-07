@@ -1,0 +1,180 @@
+import numpy as np
+import pymc as pm
+import pandas as pd
+import matplotlib.pyplot as plt
+from SALib.sample import saltelli
+from SALib.analyze import sobol
+import pytensor
+import pytensor.tensor as pt
+
+# Suppress PyTensor warnings
+pytensor.config.cxx = ""
+
+# Set random seed
+np.random.seed(42)
+
+# ========================================================================
+# 1. DATA CONFIGURATION
+# ========================================================================
+observed_FoS = np.array([1.2, 1.3, 1.1, 1.4, 1.0, 1.5])  # Observed FoS values
+cohesion_data = np.array([20, 22, 18, 21, 19, 23])        # Cohesion (kPa)
+friction_angle_data = np.array([50, 52, 48, 51, 49, 53])  # Friction angle (degrees)
+rainfall_data = np.array([120, 250, 180])                  # Rainfall (mm/month)
+PGA_data = np.array([0.3, 0.35, 0.4, 0.45, 0.5, 0.6])     # PGA (g)
+slope_angle_data = np.array([75, 76, 74, 77, 73, 78])     # Slope angle (degrees)
+slope_height_data = np.array([140, 150, 145, 155, 135, 160]) # Slope height (m)
+porosity_data = np.array([0.18, 0.20, 0.17, 0.22, 0.16, 0.23]) # Porosity
+water_content_data = np.array([0.09, 0.10, 0.08, 0.11, 0.07, 0.12]) # Water content
+
+# ========================================================================
+# 2. GREEN-AMPT INFILTRATION MODEL (PyTensor-compatible)
+# ========================================================================
+def green_ampt_model(rainfall_mm, duration_days=30, K_s=0.01, psi=0.2, theta_s=0.4, theta_i=0.1):
+    """
+    PyTensor-compatible infiltration calculation.
+    Returns: Infiltration depth (m)
+    """
+    rainfall_m = rainfall_mm / 1000  # Convert mm to meters
+    dt = duration_days * 24  # Duration in hours
+    F = K_s * dt + (theta_s - theta_i) * psi * pt.log(1 + (K_s * dt)/((theta_s - theta_i)*psi))
+    return pt.switch(F < rainfall_m, F, rainfall_m)  # Symbolic minimum
+
+# ========================================================================
+# 3. FACTOR OF SAFETY CALCULATION (PyTensor operations)
+# ========================================================================
+def calculate_FoS_planar(c, phi, rainfall_mm, PGA, slope_angle, slope_height, porosity, water_content):
+    # Convert to radians
+    phi_rad = pt.deg2rad(phi)
+    alpha_rad = pt.deg2rad(slope_angle)
+    
+    # Infiltration and pore pressure
+    h_w = green_ampt_model(rainfall_mm)
+    u = 9.81 * h_w  # Pore pressure (kPa)
+    
+    # Unit weight calculation
+    gamma = 26.5  # kN/m³
+    gamma_adj = gamma * (1 - porosity) + 9.81 * porosity * water_content
+    
+    # Stresses
+    normal_stress = gamma_adj * slope_height * pt.cos(alpha_rad)
+    shear_stress = gamma_adj * slope_height * pt.sin(alpha_rad)
+    effective_stress = normal_stress - u
+    
+    # Shear strength
+    shear_strength = c + effective_stress * pt.tan(phi_rad)
+    
+    # Seismic force with amplification
+    seismic_force = PGA * 1.5 * normal_stress  # 1.5x amplification
+    
+    # Factor of Safety
+    return shear_strength / (shear_stress + seismic_force)
+
+# ========================================================================
+# 4. BAYESIAN MODEL (FIXED)
+# ========================================================================
+def run_bayesian_analysis():
+    with pm.Model() as model:  # <-- Define model context
+        # Priors
+        cohesion = pm.Normal("cohesion", mu=np.mean(cohesion_data), sigma=np.std(cohesion_data))
+        friction_angle = pm.Normal("friction_angle", mu=np.mean(friction_angle_data), sigma=np.std(friction_angle_data))
+        rainfall = pm.Uniform("rainfall", lower=120, upper=250)  # mm/month
+        PGA = pm.Uniform("PGA", lower=0.3, upper=0.7)
+        slope_angle = pm.Normal("slope_angle", mu=np.mean(slope_angle_data), sigma=np.std(slope_angle_data))
+        slope_height = pm.Normal("slope_height", mu=np.mean(slope_height_data), sigma=np.std(slope_height_data))
+        porosity = pm.Normal("porosity", mu=np.mean(porosity_data), sigma=np.std(porosity_data))
+        water_content = pm.Normal("water_content", mu=np.mean(water_content_data), sigma=np.std(water_content_data))
+        
+        # Deterministic FoS
+        FoS = pm.Deterministic(
+            "FoS",
+            calculate_FoS_planar(
+                cohesion, friction_angle, rainfall,
+                PGA, slope_angle, slope_height,
+                porosity, water_content
+            )
+        )
+        
+        # Likelihood
+        pm.Normal("obs", mu=FoS, sigma=0.3, observed=observed_FoS)
+        
+        # Sampling (MUST BE INSIDE MODEL CONTEXT)
+        trace = pm.sample(2000, tune=1000, chains=4, cores=1)
+    
+    return trace
+
+# ========================================================================
+# 5. SOBOL SENSITIVITY ANALYSIS (UNCHANGED)
+# ========================================================================
+def perform_sobol_analysis():
+    problem = {
+        "num_vars": 8,
+        "names": ["cohesion", "friction_angle", "rainfall", "PGA",
+                  "slope_angle", "slope_height", "porosity", "water_content"],
+        "bounds": [
+            [18, 23],          # Cohesion (kPa)
+            [48, 53],          # Friction angle (degrees)
+            [120, 250],        # Rainfall (mm/month)
+            [0.3, 0.7],        # PGA (g)
+            [73, 78],          # Slope angle (degrees)
+            [135, 160],        # Slope height (m)
+            [0.16, 0.23],      # Porosity
+            [0.07, 0.12],      # Water content
+        ]
+    }
+    
+    # Generate samples (convert rainfall to meters)
+    param_values = saltelli.sample(problem, 1024)
+    param_values[:, 2] /= 1000
+    
+    # Evaluate model
+    FoS_values = np.array([calculate_FoS_planar(*params).eval() for params in param_values])
+    
+    # Analyze
+    Si = sobol.analyze(problem, FoS_values)
+    
+    # Plot results
+    plt.figure(figsize=(10, 6))
+    plt.bar(problem["names"], Si["S1"], label="First-order")
+    plt.bar(problem["names"], Si["ST"] - Si["S1"], bottom=Si["S1"], label="Total-order")
+    plt.xticks(rotation=45)
+    plt.ylabel("Sobol Index")
+    plt.legend()
+    plt.show()
+    
+    return Si
+
+# ========================================================================
+# 6. OLS REGRESSION ANALYSIS (UNCHANGED)
+# ========================================================================
+def perform_ols(trace):
+    df = pm.extract(trace).to_dataframe()
+    X = df.drop(columns=["FoS", "obs"])
+    X = sm.add_constant(X)
+    y = df["FoS"]
+    
+    model = sm.OLS(y, X).fit()
+    print(model.summary())
+    
+    # Plot coefficients
+    plt.figure(figsize=(10, 6))
+    model.params[1:].plot(kind="barh")  # Exclude intercept
+    plt.title("OLS Regression Coefficients")
+    plt.xlabel("Effect Size")
+    plt.show()
+
+# ========================================================================
+# MAIN EXECUTION
+# ========================================================================
+if __name__ == "__main__":
+    # Bayesian Inference
+    trace = run_bayesian_analysis()  # <-- Now works inside model context
+    
+    # Posterior Visualization
+    pm.plot_trace(trace)
+    plt.show()
+    
+    # Sobol Sensitivity
+    Si = perform_sobol_analysis()
+    
+    # OLS Regression
+    perform_ols(trace)
